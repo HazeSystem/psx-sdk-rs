@@ -6,6 +6,9 @@ use std::io::Write;
 use std::process::{self, Command, Stdio};
 use std::str::FromStr;
 
+mod iso9660;
+mod package;
+
 #[derive(Debug)]
 enum CargoCommand {
     Build,
@@ -84,6 +87,12 @@ struct Opt {
 
     #[clap(long, help = "Use an alternate target JSON")]
     json: Option<String>,
+
+    #[clap(
+        long,
+        help = "Packages an EXE into an ISO, building a new EXE if one doesn't exist"
+    )]
+    package: bool,
 }
 
 fn main() {
@@ -195,7 +204,17 @@ fn main() {
         }
     }
 
-    if let Some(subcmd) = opt.cargo_subcmd {
+    // If --package is specified, make sure we have an executable
+    let mut cargo_cmd = opt.cargo_subcmd;
+    let mut exe = metadata.target_directory.clone().into_std_path_buf();
+    exe.push("mipsel-sony-psx/release");
+    exe.push(&metadata.packages[0].name);
+    exe.set_extension("exe");
+    if !exe.exists() && opt.package {
+        cargo_cmd = Some(CargoCommand::Build);
+    }
+
+    if let Some(subcmd) = cargo_cmd {
         let subcmd: &str = subcmd.into();
         let mut cmd = Command::new(CARGO_CMD);
         cmd.arg(toolchain)
@@ -229,5 +248,9 @@ fn main() {
             let code = status.code().unwrap_or(1);
             process::exit(code);
         }
+    }
+
+    if opt.package {
+        package::create_default_iso(exe);
     }
 }
